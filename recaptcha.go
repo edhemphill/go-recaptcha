@@ -53,6 +53,27 @@ func check(remoteip, response string) (r RecaptchaResponse, err error) {
 	return
 }
 
+func (sess *CaptchaSession) check(remoteip, response string) (r RecaptchaResponse, err error) {
+	resp, err := http.PostForm(recaptchaServerName,
+		url.Values{"secret": {sess.recaptchaPrivateKey}, "remoteip": {remoteip}, "response": {response}})
+	if err != nil {
+		log.Printf("Post error: %s\n", err)
+		return
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Println("Read error: could not read body: %s", err)
+		return
+	}
+	err = json.Unmarshal(body, &r)
+	if err != nil {
+		log.Println("Read error: got invalid JSON: %s", err)
+		return
+	}
+	return
+}
+
 // Confirm is the public interface function.
 // It calls check, which the client ip address, the challenge code from the reCaptcha form,
 // and the client's response input to that challenge to determine whether or not
@@ -68,4 +89,21 @@ func Confirm(remoteip, response string) (result bool, err error) {
 // reCaptcha private key (string) value, which will be different for every domain.
 func Init(key string) {
 	recaptchaPrivateKey = key
+}
+
+type CaptchaSession struct {
+	recaptchaPrivateKey string
+}
+
+// NewSession creates an object to deal with a recaptcha session
+func NewSession(privatekey string) (ret *CaptchaSession) {
+	ret = new(CaptchaSession)
+	ret.recaptchaPrivateKey = privatekey
+	return
+}
+
+func (sess *CaptchaSession) Confirm(remoteip, response string) (result bool, err error) {
+	resp, err := sess.check(remoteip, response)
+	result = resp.Success
+	return
 }
